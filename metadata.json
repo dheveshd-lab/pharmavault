@@ -1,0 +1,6 @@
+{
+  "name": "Pharmacy Inventory Management",
+  "description": "User-driven pharmacy and medicine inventory system with FEFO batch tracking, expiry monitoring, supplier management, and dispensing controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
