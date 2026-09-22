@@ -1,4 +1,4 @@
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   loadDatabase,
   saveDatabase,
@@ -9,17 +9,20 @@ import {
   setCORS,
 } from '../_lib/db';
 
-export default async function handler(req: any, res: any): Promise<void> {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   setCORS(res);
 
   if (req.method === 'OPTIONS') {
-    res.statusCode = 200;
-    res.end();
+    res.status(200).end();
     return;
   }
 
   if (req.method !== 'POST') {
-    sendJson(res, 405, { error: 'Method Not Allowed. Use POST.' });
+    sendJson(res, 405, {
+      success: false,
+      error: 'Method Not Allowed. Use POST.',
+      message: 'Method Not Allowed. Use POST.',
+    });
     return;
   }
 
@@ -28,7 +31,11 @@ export default async function handler(req: any, res: any): Promise<void> {
     const { email, password } = body;
 
     if (!email || !password) {
-      sendJson(res, 400, { error: 'Email and password are required.' });
+      sendJson(res, 400, {
+        success: false,
+        error: 'Email and password are required.',
+        message: 'Email and password are required.',
+      });
       return;
     }
 
@@ -80,8 +87,9 @@ export default async function handler(req: any, res: any): Promise<void> {
   } catch (err: any) {
     console.error('Login error in Vercel function:', err);
     sendJson(res, 500, {
+      success: false,
       error: 'An internal error occurred during login. Please try again.',
-      message: err.message,
+      message: err.message || 'Internal server error',
     });
   }
 }

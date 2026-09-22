@@ -1,3 +1,4 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   loadDatabase,
   saveDatabase,
@@ -10,12 +11,11 @@ import {
 } from '../_lib/db';
 import crypto from 'crypto';
 
-export default async function handler(req: any, res: any): Promise<void> {
+export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   setCORS(res);
 
   if (req.method === 'OPTIONS') {
-    res.statusCode = 200;
-    res.end();
+    res.status(200).end();
     return;
   }
 

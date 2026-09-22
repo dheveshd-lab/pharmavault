@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import seedData from '../../data/db.json';
 
 export interface StoredUser {
   id: string;
@@ -108,10 +109,11 @@ function initFileSystem() {
     if (!fs.existsSync(UPLOADS_DIR)) {
       fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
-    if (IS_SERVERLESS && !fs.existsSync(DB_FILE)) {
-      const defaultDbFile = path.join(BASE_DATA_DIR, 'db.json');
-      if (fs.existsSync(defaultDbFile)) {
-        fs.copyFileSync(defaultDbFile, DB_FILE);
+    if (!fs.existsSync(DB_FILE)) {
+      try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(seedData, null, 2), 'utf-8');
+      } catch (writeErr) {
+        console.warn('Could not write initial db to disk:', writeErr);
       }
     }
   } catch (err) {
@@ -128,24 +130,24 @@ export function loadDatabase(): DatabaseSchema {
       const raw = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(raw);
       return {
-        users: Array.isArray(parsed.users) ? parsed.users : [],
-        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-        medicines: Array.isArray(parsed.medicines) ? parsed.medicines : [],
-        batches: Array.isArray(parsed.batches) ? parsed.batches : [],
-        suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
-        dispensingRecords: Array.isArray(parsed.dispensingRecords) ? parsed.dispensingRecords : [],
+        users: Array.isArray(parsed.users) ? parsed.users : ((seedData as any).users || []),
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : ((seedData as any).sessions || []),
+        medicines: Array.isArray(parsed.medicines) ? parsed.medicines : ((seedData as any).medicines || []),
+        batches: Array.isArray(parsed.batches) ? parsed.batches : ((seedData as any).batches || []),
+        suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : ((seedData as any).suppliers || []),
+        dispensingRecords: Array.isArray(parsed.dispensingRecords) ? parsed.dispensingRecords : ((seedData as any).dispensingRecords || []),
       };
     }
   } catch (err) {
-    console.error('Error reading db.json:', err);
+    console.error('Error reading db.json, using bundled seed data:', err);
   }
   return {
-    users: [],
-    sessions: [],
-    medicines: [],
-    batches: [],
-    suppliers: [],
-    dispensingRecords: [],
+    users: Array.isArray((seedData as any).users) ? (seedData as any).users : [],
+    sessions: Array.isArray((seedData as any).sessions) ? (seedData as any).sessions : [],
+    medicines: Array.isArray((seedData as any).medicines) ? (seedData as any).medicines : [],
+    batches: Array.isArray((seedData as any).batches) ? (seedData as any).batches : [],
+    suppliers: Array.isArray((seedData as any).suppliers) ? (seedData as any).suppliers : [],
+    dispensingRecords: Array.isArray((seedData as any).dispensingRecords) ? (seedData as any).dispensingRecords : [],
   };
 }
 

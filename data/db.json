@@ -34,6 +34,13 @@
       "email": "userb_1790083108711@pharmavault.org",
       "passwordHash": "$2b$10$h9OYU8hgtgVUbnfVTdWRBuLWWgOOI26Anm/9GuTF0dn5TUA3uDEjy",
       "createdAt": "2026-09-22T13:18:28.791Z"
+    },
+    {
+      "id": "usr_1790083836828_7ffaceb4",
+      "name": "Dr. Verified",
+      "email": "dr.verified_1790083836721@pharmavault.org",
+      "passwordHash": "$2b$10$Bnqww13LsT2azuw5CF7oi.23vo.ZGVJCr1gZTqObmuMd5x3HlKi/6",
+      "createdAt": "2026-09-22T13:30:36.828Z"
     }
   ],
   "sessions": [
@@ -42,12 +49,6 @@
       "userId": "usr_1790081579335_5c0103af",
       "createdAt": 1790081579336,
       "expiresAt": 1792673579336
-    },
-    {
-      "token": "956b693b2bee705a8207949b3f786a60d4a75b4b2d11d0e8cb679a4afbd1fa2e",
-      "userId": "usr_1790081046062_87554bad",
-      "createdAt": 1790082437831,
-      "expiresAt": 1792674437831
     },
     {
       "token": "c6afa653f16707f9c0a8e3c3a3facba0bd33b5695f039ac9224528c679278b60",
@@ -78,6 +79,24 @@
       "userId": "usr_1790083108791_146a5ae7",
       "createdAt": 1790083108791,
       "expiresAt": 1792675108791
+    },
+    {
+      "token": "b4aafb086578881483c1d82643af84f27e83cbca29d35717f7aa545ed02c0ffb",
+      "userId": "usr_1790081046062_87554bad",
+      "createdAt": 1790083675654,
+      "expiresAt": 1792675675654
+    },
+    {
+      "token": "e0c53c9f5c5d1e7ccca1c4d0436b2f16bc968cf2e3ec376d5a0adae7a6f50cd2",
+      "userId": "usr_1790083836828_7ffaceb4",
+      "createdAt": 1790083836829,
+      "expiresAt": 1792675836829
+    },
+    {
+      "token": "025b6562a3aaccce5be634291b1d5abe64802b3d26fc49ca3fc53cd7c3290cbc",
+      "userId": "usr_1790083836828_7ffaceb4",
+      "createdAt": 1790083836929,
+      "expiresAt": 1792675836929
     }
   ],
   "medicines": [
