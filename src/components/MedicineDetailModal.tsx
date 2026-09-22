@@ -4,6 +4,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { Batch, DispensingRecord, Medicine } from '../types';
 import { getExpiryStatus, getMedicineInventory, sortBatchesFEFO } from '../utils/fefo';
 import { classifyUsageVolumes } from '../utils/usageIntelligence';
+import { MedicineImage } from './MedicineImage';
 
 interface MedicineDetailModalProps {
   isOpen: boolean;
@@ -145,9 +146,12 @@ export const MedicineDetailModal: React.FC<MedicineDetailModalProps> = ({
         {/* Header */}
         <div className="flex items-start justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-teal-100 dark:bg-teal-950/80 border border-teal-200 dark:border-teal-800 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0 mt-0.5">
-              <Pill className="w-6 h-6" />
-            </div>
+            <MedicineImage
+              src={medicine.imageUrl}
+              alt={medicine.name}
+              size="md"
+              className="mt-0.5 shadow-sm"
+            />
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">

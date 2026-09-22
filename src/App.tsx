@@ -21,14 +21,32 @@ import {
   Menu,
   X,
   Activity,
+  Loader2,
+  Cloud,
 } from 'lucide-react';
-import { AppData, Batch, DispensingRecord, Medicine, Supplier } from './types';
+import { AppData, AuthSession, Batch, DispensingRecord, Medicine, Supplier, User } from './types';
 import {
   getInitialOrStoredData,
   persistAppData,
   generateDemoDataset,
   INITIAL_EMPTY_DATA,
 } from './utils/storage';
+import {
+  getStoredSession,
+  saveStoredSession,
+  clearStoredSession,
+  apiGetCurrentUser,
+  apiLogout,
+  apiFetchInventory,
+  apiSyncInventory,
+  apiSaveMedicine,
+  apiDeleteMedicine,
+  apiSaveBatch,
+  apiDeleteBatch,
+  apiSaveSupplier,
+  apiDeleteSupplier,
+  apiRecordDispense,
+} from './utils/api';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AddMedicineModal } from './components/AddMedicineModal';
 import { AddBatchModal } from './components/AddBatchModal';
@@ -43,12 +61,19 @@ import { DispensingHistoryView } from './components/DispensingHistoryView';
 import { DispenseView } from './components/DispenseView';
 import { UsageIntelligenceView } from './components/UsageIntelligenceView';
 import { SettingsView } from './components/SettingsView';
+import { AuthScreen } from './components/AuthScreen';
+import { UserMenu } from './components/UserMenu';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { calculateFEFOAllocation } from './utils/fefo';
 
 export default function App() {
-  // Inventory database state: ALWAYS STARTS COMPLETELY EMPTY FOR NEW USERS
-  const [data, setData] = useState<AppData>(() => getInitialOrStoredData());
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Inventory database state: per-user cloud isolated
+  const [data, setData] = useState<AppData>(() => INITIAL_EMPTY_DATA);
 
   // Navigation tab
   const [activeTab, setActiveTab] = useState<
@@ -76,10 +101,68 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Save to localStorage whenever data changes
+  // Check auth session on boot
   useEffect(() => {
-    persistAppData(data);
-  }, [data]);
+    async function initAuth() {
+      setAuthLoading(true);
+      const session = getStoredSession();
+      if (!session) {
+        setAuthLoading(false);
+        return;
+      }
+
+      try {
+        const user = await apiGetCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          // Load user inventory from cloud database
+          try {
+            const userInventory = await apiFetchInventory();
+            setData(userInventory);
+          } catch {
+            // Fallback to local user cache if offline
+            setData(getInitialOrStoredData());
+          }
+        } else {
+          setCurrentUser(null);
+        }
+      } catch (err) {
+        console.warn('Auth check failed:', err);
+        clearStoredSession();
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    }
+
+    initAuth();
+  }, []);
+
+  // When auth session succeeds
+  const handleAuthSuccess = async (session: AuthSession) => {
+    setCurrentUser(session.user);
+    setAuthLoading(true);
+    try {
+      const userInventory = await apiFetchInventory();
+      setData(userInventory);
+      addToast('Welcome back', `Signed in as ${session.user.name}. Cloud inventory loaded.`);
+    } catch {
+      setData(INITIAL_EMPTY_DATA);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiLogout();
+    } catch {
+      clearStoredSession();
+    }
+    setCurrentUser(null);
+    setData(INITIAL_EMPTY_DATA);
+    addToast('Signed Out', 'You have been securely signed out of PharmaVault.');
+  };
 
   // Modals state
   const [isAddMedicineOpen, setIsAddMedicineOpen] = useState(false);
@@ -103,8 +186,8 @@ export default function App() {
     }
   }, [data.medicines]);
 
-  // Handlers
-  const handleSaveMedicine = (medicine: Medicine) => {
+  // Handlers with Cloud Sync
+  const handleSaveMedicine = async (medicine: Medicine) => {
     setData((prev) => {
       const exists = prev.medicines.some((m) => m.id === medicine.id);
       let updatedMedicines: Medicine[];
@@ -113,83 +196,150 @@ export default function App() {
       } else {
         updatedMedicines = [medicine, ...prev.medicines];
       }
-      return {
-        ...prev,
-        medicines: updatedMedicines,
-      };
+      return { ...prev, medicines: updatedMedicines, isDemoData: false };
     });
 
+    try {
+      await apiSaveMedicine(medicine);
+    } catch (err: any) {
+      console.error('Failed to sync medicine to cloud:', err);
+    }
+
     addToast(
-      editingMedicine ? 'Medicine Updated' : 'Medicine Created Successfully',
-      `"${medicine.name}" is now available for adding batches and FEFO dispensing.`
+      medicine.id && data.medicines.some((m) => m.id === medicine.id)
+        ? 'Medicine Updated'
+        : 'Medicine Added',
+      `${medicine.name} (${medicine.dosageForm}) saved to your cloud catalog.`
     );
-    setEditingMedicine(null);
   };
 
-  const handleDeleteMedicine = (medicineId: string) => {
+  const handleDeleteMedicine = async (medicineId: string) => {
     const med = data.medicines.find((m) => m.id === medicineId);
     setData((prev) => ({
       ...prev,
       medicines: prev.medicines.filter((m) => m.id !== medicineId),
       batches: prev.batches.filter((b) => b.medicineId !== medicineId),
     }));
-    addToast('Medicine Deleted', `"${med?.name || 'Item'}" and associated batches removed.`);
-  };
 
-  const handleSaveBatch = (batch: Batch) => {
-    setData((prev) => ({
-      ...prev,
-      batches: [...prev.batches, batch],
-    }));
+    if (viewingMedicine && viewingMedicine.id === medicineId) {
+      setViewingMedicine(null);
+    }
+
+    try {
+      await apiDeleteMedicine(medicineId);
+    } catch (err) {
+      console.error('Failed to delete medicine from cloud:', err);
+    }
 
     addToast(
-      'Batch Added to Inventory',
-      `Batch ${batch.batchNumber} (${batch.quantity} units) registered in FEFO rotation.`
+      'Medicine Deleted',
+      `${med?.name || 'Medicine'} and its batches have been removed from your inventory.`,
+      'info'
     );
   };
 
-  const handleDeleteBatch = (batchId: string) => {
-    const b = data.batches.find((item) => item.id === batchId);
-    setData((prev) => ({
-      ...prev,
-      batches: prev.batches.filter((item) => item.id !== batchId),
-    }));
-    addToast('Batch Removed', `Batch ${b?.batchNumber || 'record'} has been deleted.`);
-  };
-
-  const handleSaveSupplier = (supplier: Supplier) => {
-    setData((prev) => ({
-      ...prev,
-      suppliers: [...prev.suppliers, supplier],
-    }));
-    addToast(
-      'Supplier Registered',
-      `"${supplier.name}" is now available for incoming batch assignments.`
-    );
-  };
-
-  const handleDeleteSupplier = (supplierId: string) => {
-    const s = data.suppliers.find((sup) => sup.id === supplierId);
-    setData((prev) => ({
-      ...prev,
-      suppliers: prev.suppliers.filter((sup) => sup.id !== supplierId),
-    }));
-    addToast('Supplier Removed', `"${s?.name || 'Supplier'}" removed.`);
-  };
-
-  const handleDispense = (record: DispensingRecord) => {
+  const handleSaveBatch = async (batch: Batch) => {
     setData((prev) => {
-      // Decrement quantities from batches based on allocations
+      const exists = prev.batches.some((b) => b.id === batch.id);
+      let updatedBatches: Batch[];
+      if (exists) {
+        updatedBatches = prev.batches.map((b) => (b.id === batch.id ? batch : b));
+      } else {
+        updatedBatches = [batch, ...prev.batches];
+      }
+      return { ...prev, batches: updatedBatches, isDemoData: false };
+    });
+
+    try {
+      await apiSaveBatch(batch);
+    } catch (err) {
+      console.error('Failed to sync batch to cloud:', err);
+    }
+
+    addToast(
+      'Batch Registered',
+      `Batch ${batch.batchNumber} (${batch.quantity} units) registered for ${batch.medicineName}.`
+    );
+  };
+
+  const handleDeleteBatch = async (batchId: string) => {
+    const batch = data.batches.find((b) => b.id === batchId);
+    setData((prev) => ({
+      ...prev,
+      batches: prev.batches.filter((b) => b.id !== batchId),
+    }));
+
+    try {
+      await apiDeleteBatch(batchId);
+    } catch (err) {
+      console.error('Failed to delete batch from cloud:', err);
+    }
+
+    addToast(
+      'Batch Removed',
+      `Batch ${batch?.batchNumber || ''} has been removed.`,
+      'info'
+    );
+  };
+
+  const handleSaveSupplier = async (supplier: Supplier) => {
+    setData((prev) => {
+      const exists = prev.suppliers.some((s) => s.id === supplier.id);
+      let updated: Supplier[];
+      if (exists) {
+        updated = prev.suppliers.map((s) => (s.id === supplier.id ? supplier : s));
+      } else {
+        updated = [supplier, ...prev.suppliers];
+      }
+      return { ...prev, suppliers: updated, isDemoData: false };
+    });
+
+    try {
+      await apiSaveSupplier(supplier);
+    } catch (err) {
+      console.error('Failed to sync supplier to cloud:', err);
+    }
+
+    addToast('Supplier Saved', `${supplier.name} added to suppliers directory.`);
+  };
+
+  const handleDeleteSupplier = async (supplierId: string) => {
+    const s = data.suppliers.find((item) => item.id === supplierId);
+    setData((prev) => ({
+      ...prev,
+      suppliers: prev.suppliers.filter((item) => item.id !== supplierId),
+    }));
+
+    try {
+      await apiDeleteSupplier(supplierId);
+    } catch (err) {
+      console.error('Failed to delete supplier from cloud:', err);
+    }
+
+    addToast('Supplier Removed', `${s?.name || 'Supplier'} deleted.`, 'info');
+  };
+
+  const handleRecordDispensing = async (record: DispensingRecord) => {
+    let updatedBatchesCopy: Batch[] = [];
+
+    setData((prev) => {
+      const allocMap = new Map<string, number>();
+      for (const a of record.batchAllocations) {
+        allocMap.set(a.batchId, a.quantity);
+      }
+
       const updatedBatches = prev.batches.map((b) => {
-        const alloc = record.batchAllocations.find((a) => a.batchId === b.id);
-        if (alloc) {
+        if (allocMap.has(b.id)) {
+          const deduct = allocMap.get(b.id)!;
           return {
             ...b,
-            quantity: Math.max(0, b.quantity - alloc.quantity),
+            quantity: Math.max(0, b.quantity - deduct),
           };
         }
         return b;
       });
+
+      updatedBatchesCopy = updatedBatches;
 
       return {
         ...prev,
@@ -197,6 +347,12 @@ export default function App() {
         dispensingRecords: [record, ...prev.dispensingRecords],
       };
     });
+
+    try {
+      await apiRecordDispense(record, updatedBatchesCopy);
+    } catch (err) {
+      console.error('Failed to sync dispense transaction to cloud:', err);
+    }
 
     addToast(
       'Dispensing recorded successfully.',
@@ -250,115 +406,124 @@ export default function App() {
         prescribedBy: params.prescribedBy,
         notes: params.notes,
         dispensedAt: params.dispensedAt || new Date().toISOString(),
+        unitPrice: params.unitPrice || (params.quantity > 0 && totalAmount > 0 ? Number((totalAmount / params.quantity).toFixed(2)) : undefined),
         totalAmount: totalAmount > 0 ? totalAmount : undefined,
       };
 
-      handleDispense(record);
+      await handleRecordDispensing(record);
       return true;
     } catch (err: any) {
-      console.error('Dispensing operation failed:', err);
-      addToast('Dispensing Failed', 'Unable to process dispensing. Please check stock and try again.', 'error');
+      addToast('Dispense Failed', err?.message || 'An unexpected error occurred.', 'error');
       return false;
     }
   };
 
-  const handleLoadDemoData = () => {
+  // Demo Data controls
+  const handleLoadDemoData = async () => {
     const demo = generateDemoDataset();
     setData(demo);
+    try {
+      await apiSyncInventory(demo);
+    } catch (err) {
+      console.error('Failed to sync demo data:', err);
+    }
     addToast(
-      'Demo Data Loaded',
-      'Sample medicines, FEFO batches, and suppliers have been populated.',
+      'Demo Dataset Loaded',
+      'Sample pharmaceutical data populated with active & critical FEFO batches.',
       'info'
     );
   };
 
-  const handleClearDemoData = () => {
+  const handleClearDemoData = async () => {
     setData(INITIAL_EMPTY_DATA);
-    addToast(
-      'Demo Data Cleared',
-      'Inventory reset to clean empty database.',
-      'info'
-    );
+    try {
+      await apiSyncInventory(INITIAL_EMPTY_DATA);
+    } catch (err) {
+      console.error('Failed to clear demo data from cloud:', err);
+    }
+    addToast('Demo Data Cleared', 'The database has been restored to clean state.', 'info');
   };
 
-  const handleClearAllData = () => {
+  const handleClearAllData = async () => {
     setData(INITIAL_EMPTY_DATA);
-    addToast(
-      'Inventory Reset',
-      'All medicines, batches, suppliers, and dispensing records erased.',
-      'info'
-    );
+    try {
+      await apiSyncInventory(INITIAL_EMPTY_DATA);
+    } catch (err) {
+      console.error('Failed to reset inventory in cloud:', err);
+    }
+    addToast('Inventory Reset', 'All inventory and transaction records have been erased.', 'info');
   };
 
-  const handleImportData = (imported: AppData) => {
+  const handleImportData = async (imported: AppData) => {
     setData(imported);
+    try {
+      await apiSyncInventory(imported);
+    } catch (err) {
+      console.error('Failed to sync imported data to cloud:', err);
+    }
     addToast(
-      'Database Restored',
-      `Imported ${imported.medicines.length} medicines and ${imported.batches.length} batches.`
+      'Data Imported',
+      `Restored ${imported.medicines.length} medicines and ${imported.batches.length} batches.`
     );
   };
 
-  // Helper to open Add Batch modal with preselected medicine
+  // Quick Action Triggers
   const triggerAddBatch = (medicineId?: string) => {
     setBatchTargetMedicineId(medicineId);
     setIsAddBatchOpen(true);
   };
 
-  // Helper to open Dispense view/page with preselected medicine
   const triggerDispense = (medicineId?: string) => {
     setDispenseTargetMedicineId(medicineId);
-    setActiveTab('dispense');
+    setIsDispenseOpen(true);
   };
 
-  // Helper to edit medicine
-  const triggerEditMedicine = (med: Medicine) => {
-    setEditingMedicine(med);
+  const triggerEditMedicine = (medicine: Medicine) => {
+    setEditingMedicine(medicine);
     setIsAddMedicineOpen(true);
   };
 
-  const hasMedicinesWithStock = data.batches.some((b) => b.quantity > 0);
+  // Loading Screen
+  if (authLoading) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-white font-sans">
+        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-500/20 text-teal-400 border border-teal-500/30 mb-4 animate-pulse">
+          <Pill className="w-7 h-7" />
+        </div>
+        <div className="flex items-center gap-2 text-sm text-slate-300 font-medium">
+          <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+          <span>Verifying PharmaVault Cloud Credentials...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, render Login / Register / Forgot Password screen
+  if (!currentUser) {
+    return <AuthScreen onSuccess={handleAuthSuccess} />;
+  }
+
+  const hasMedicinesWithStock = data.medicines.some((m) =>
+    data.batches.some((b) => b.medicineId === m.id && b.quantity > 0)
+  );
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans antialiased">
-      {/* Toast Notification Container */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans selection:bg-teal-500 selection:text-white">
+      {/* Global Toast Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Demo Data Banner when active as required */}
-      {data.isDemoData && (
-        <div
-          id="demo-data-indicator-banner"
-          className="bg-amber-500 text-amber-950 px-4 py-2 text-xs font-semibold flex items-center justify-between shadow-xs sticky top-0 z-40"
-        >
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-md bg-amber-900 text-amber-100 text-[10px] uppercase tracking-wider font-extrabold">
-              Demo Data
-            </span>
-            <span>
-              You are currently viewing demonstration inventory. The regular app starts completely empty.
-            </span>
-          </div>
-          <button
-            id="banner-clear-demo-data-btn"
-            onClick={handleClearDemoData}
-            className="px-2.5 py-1 rounded-md bg-amber-950 text-amber-100 hover:bg-black font-medium transition-colors cursor-pointer text-[11px]"
-          >
-            Clear Demo Data
-          </button>
-        </div>
-      )}
-
-      {/* Top Header */}
-      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 shadow-xs">
+      {/* Header Bar */}
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo and Brand */}
+            {/* Logo and System Status */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-teal-600 dark:bg-teal-500 text-white flex items-center justify-center shadow-sm">
                 <Pill className="w-5 h-5" />
               </div>
               <div>
                 <span className="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  PharmVault
+                  PharmaVault
                   <span className="text-[10px] px-1.5 py-0.5 rounded-md font-semibold bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
                     FEFO Active
                   </span>
@@ -491,19 +656,26 @@ export default function App() {
               </button>
             </nav>
 
-            {/* Quick Action + Add Medicine Button in Navbar */}
-            <div className="flex items-center gap-2">
+            {/* User Profile & Quick Actions */}
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 id="header-quick-add-medicine-btn"
                 onClick={() => {
                   setEditingMedicine(null);
                   setIsAddMedicineOpen(true);
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 + Add Medicine
               </button>
+
+              {/* User Avatar Menu with Logout */}
+              <UserMenu
+                user={currentUser}
+                onLogout={handleLogout}
+                onOpenSettings={() => setActiveTab('settings')}
+              />
 
               {/* Mobile menu toggle */}
               <button
@@ -544,20 +716,16 @@ export default function App() {
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
             >
-              <Box className="w-4 h-4" /> Batches ({data.batches.length})
+              <Box className="w-4 h-4" /> Batches (FEFO) ({data.batches.length})
             </button>
             <button
               onClick={() => {
                 setActiveTab('dispense');
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium ${
-                activeTab === 'dispense'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
             >
-              <Send className="w-4 h-4" /> Dispense Medicine
+              <Send className="w-4 h-4" /> Dispense
             </button>
             <button
               onClick={() => {
@@ -575,7 +743,7 @@ export default function App() {
               }}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
             >
-              <ReceiptText className="w-4 h-4" /> Dispensing Logs
+              <ReceiptText className="w-4 h-4" /> Dispensing History
             </button>
             <button
               onClick={() => {
@@ -691,6 +859,7 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsView
             data={data}
+            currentUser={currentUser}
             onLoadDemoData={handleLoadDemoData}
             onClearDemoData={handleClearDemoData}
             onClearAllData={handleClearAllData}
@@ -699,28 +868,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-4 text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>
-            PharmVault System • Clean-Start Pharmacy & Inventory Engine
-          </span>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setActiveTab('settings')}
-              className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-            >
-              Demo Data Options
-            </button>
-            <span>•</span>
-            <span className="text-teal-600 dark:text-teal-400 font-medium">
-              FEFO Priority Enabled
-            </span>
-          </div>
-        </div>
-      </footer>
-
-      {/* Modals */}
+      {/* Shared Modals */}
       <AddMedicineModal
         isOpen={isAddMedicineOpen}
         onClose={() => {
@@ -741,27 +889,13 @@ export default function App() {
         medicines={data.medicines}
         suppliers={data.suppliers}
         selectedMedicineId={batchTargetMedicineId}
-        onRequestAddSupplier={() => {
-          setIsAddSupplierOpen(true);
-        }}
+        onRequestAddSupplier={() => setIsAddSupplierOpen(true)}
       />
 
       <AddSupplierModal
         isOpen={isAddSupplierOpen}
         onClose={() => setIsAddSupplierOpen(false)}
         onSave={handleSaveSupplier}
-      />
-
-      <DispenseModal
-        isOpen={isDispenseOpen}
-        onClose={() => {
-          setIsDispenseOpen(false);
-          setDispenseTargetMedicineId(undefined);
-        }}
-        onDispense={handleDispense}
-        medicines={data.medicines}
-        batches={data.batches}
-        initialMedicineId={dispenseTargetMedicineId}
       />
 
       <MedicineDetailModal
@@ -771,11 +905,35 @@ export default function App() {
         batches={data.batches}
         dispensingRecords={data.dispensingRecords}
         allMedicines={data.medicines}
-        onAddBatch={(medId) => triggerAddBatch(medId)}
-        onEditMedicine={triggerEditMedicine}
-        onDeleteMedicine={handleDeleteMedicine}
-        onDispenseMedicine={(medId) => triggerDispense(medId)}
+        onAddBatch={(medId) => {
+          setViewingMedicine(null);
+          triggerAddBatch(medId);
+        }}
+        onEditMedicine={(med) => {
+          setViewingMedicine(null);
+          triggerEditMedicine(med);
+        }}
+        onDeleteMedicine={(medId) => {
+          handleDeleteMedicine(medId);
+          setViewingMedicine(null);
+        }}
+        onDispenseMedicine={(medId) => {
+          setViewingMedicine(null);
+          triggerDispense(medId);
+        }}
         onDeleteBatch={handleDeleteBatch}
+      />
+
+      <DispenseModal
+        isOpen={isDispenseOpen}
+        onClose={() => {
+          setIsDispenseOpen(false);
+          setDispenseTargetMedicineId(undefined);
+        }}
+        onDispense={handleRecordDispensing}
+        medicines={data.medicines}
+        batches={data.batches}
+        initialMedicineId={dispenseTargetMedicineId}
       />
     </div>
   );

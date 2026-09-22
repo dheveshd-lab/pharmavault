@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Box, AlertCircle, Plus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Box, Plus } from 'lucide-react';
 import { Batch, Medicine, Supplier } from '../types';
 
 interface AddBatchModalProps {
@@ -21,29 +21,61 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
   selectedMedicineId,
   onRequestAddSupplier,
 }) => {
-  const [medicineId, setMedicineId] = useState(
-    selectedMedicineId || (medicines.length > 0 ? medicines[0].id : '')
-  );
+  // Controlled form state
+  const [medicineId, setMedicineId] = useState<string>('');
   const [batchNumber, setBatchNumber] = useState('');
   const [quantity, setQuantity] = useState('');
   const [manufacturingDate, setManufacturingDate] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
-  const [supplierId, setSupplierId] = useState(
-    suppliers.length > 0 ? suppliers[0].id : ''
-  );
+  const [supplierId, setSupplierId] = useState<string>('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [sellingPrice, setSellingPrice] = useState('');
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Validation errors
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+
+  // Synchronize state whenever modal opens or external selections change
+  useEffect(() => {
+    if (isOpen) {
+      if (selectedMedicineId && medicines.some((m) => m.id === selectedMedicineId)) {
+        setMedicineId(selectedMedicineId);
+      } else if (medicineId && medicines.some((m) => m.id === medicineId)) {
+        // Keep currently chosen valid medicine
+      } else {
+        setMedicineId('');
+      }
+
+      if (supplierId && suppliers.some((s) => s.id === supplierId)) {
+        // Keep currently chosen valid supplier
+      } else {
+        setSupplierId('');
+      }
+
+      setErrors({});
+    } else {
+      // Clear inputs when modal is closed
+      setBatchNumber('');
+      setQuantity('');
+      setManufacturingDate('');
+      setExpiryDate('');
+      setPurchasePrice('');
+      setSellingPrice('');
+      setErrors({});
+    }
+  }, [isOpen, selectedMedicineId, medicines, suppliers]);
 
   if (!isOpen) return null;
 
   const currentMed = medicines.find((m) => m.id === medicineId);
 
   const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!medicineId) errs.medicineId = 'Please select a medicine.';
-    if (!batchNumber.trim()) errs.batchNumber = 'Batch number is required.';
+    const errs: Record<string, string | undefined> = {};
+    if (!medicineId || !medicineId.trim()) {
+      errs.medicineId = 'Please select a medicine.';
+    }
+    if (!batchNumber.trim()) {
+      errs.batchNumber = 'Batch number is required.';
+    }
     const qty = parseInt(quantity, 10);
     if (isNaN(qty) || qty <= 0) {
       errs.quantity = 'Quantity must be greater than 0.';
@@ -51,11 +83,12 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
     if (!expiryDate) {
       errs.expiryDate = 'Expiry date is required for FEFO tracking.';
     }
-    if (!supplierId) {
+    if (!supplierId || !supplierId.trim()) {
       errs.supplierId = 'Supplier is required. Add a supplier if none exists.';
     }
+
     setErrors(errs);
-    return Object.keys(errs).length === 0;
+    return !errs.medicineId && !errs.batchNumber && !errs.quantity && !errs.expiryDate && !errs.supplierId;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -69,6 +102,7 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
     const newBatch: Batch = {
       id: `batch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       medicineId,
+      medicine_id: medicineId,
       medicineName: chosenMed?.name || 'Unknown Medicine',
       batchNumber: batchNumber.trim(),
       quantity: qty,
@@ -76,6 +110,7 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
       manufacturingDate: manufacturingDate || undefined,
       expiryDate,
       supplierId,
+      supplier_id: supplierId,
       supplierName: chosenSup?.name || 'Unknown Supplier',
       purchasePrice: purchasePrice ? parseFloat(purchasePrice) : undefined,
       sellingPrice: sellingPrice ? parseFloat(sellingPrice) : undefined,
@@ -138,22 +173,25 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
               <select
                 id="batch-medicine-select"
                 value={medicineId}
-                onChange={(e) => setMedicineId(e.target.value)}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  setMedicineId(selectedId);
+                  if (selectedId) {
+                    setErrors((prev) => ({ ...prev, medicineId: undefined }));
+                  }
+                }}
                 className={`w-full px-3 py-2 text-sm rounded-xl border ${
                   errors.medicineId
                     ? 'border-rose-500 ring-1 ring-rose-500'
                     : 'border-slate-300 dark:border-slate-700'
                 } bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500`}
               >
-                {medicines.length === 0 ? (
-                  <option value="">No medicines available - add a medicine first</option>
-                ) : (
-                  medicines.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.dosageForm} {m.strength ? `- ${m.strength}` : ''})
-                    </option>
-                  ))
-                )}
+                <option value="">-- Select a medicine --</option>
+                {medicines.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.dosageForm} {m.strength ? `- ${m.strength}` : ''})
+                  </option>
+                ))}
               </select>
             )}
             {errors.medicineId && <p className="mt-1 text-xs text-rose-500">{errors.medicineId}</p>}
@@ -169,7 +207,13 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
                 id="batch-number-input"
                 type="text"
                 value={batchNumber}
-                onChange={(e) => setBatchNumber(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setBatchNumber(val);
+                  if (val.trim()) {
+                    setErrors((prev) => ({ ...prev, batchNumber: undefined }));
+                  }
+                }}
                 placeholder="e.g., BN-2026-X90"
                 className={`w-full px-3 py-2 text-sm rounded-xl border ${
                   errors.batchNumber
@@ -192,7 +236,14 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
                 type="number"
                 min="1"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setQuantity(val);
+                  const qty = parseInt(val, 10);
+                  if (!isNaN(qty) && qty > 0) {
+                    setErrors((prev) => ({ ...prev, quantity: undefined }));
+                  }
+                }}
                 placeholder="e.g., 50"
                 className={`w-full px-3 py-2 text-sm rounded-xl border ${
                   errors.quantity
@@ -228,7 +279,13 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
                 id="batch-expiry-date-input"
                 type="date"
                 value={expiryDate}
-                onChange={(e) => setExpiryDate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setExpiryDate(val);
+                  if (val) {
+                    setErrors((prev) => ({ ...prev, expiryDate: undefined }));
+                  }
+                }}
                 className={`w-full px-3 py-2 text-sm rounded-xl border ${
                   errors.expiryDate
                     ? 'border-rose-500 ring-1 ring-rose-500'
@@ -280,13 +337,20 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
               <select
                 id="batch-supplier-select"
                 value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
+                onChange={(e) => {
+                  const selectedId = e.target.value;
+                  setSupplierId(selectedId);
+                  if (selectedId) {
+                    setErrors((prev) => ({ ...prev, supplierId: undefined }));
+                  }
+                }}
                 className={`w-full px-3 py-2 text-sm rounded-xl border ${
                   errors.supplierId
                     ? 'border-rose-500 ring-1 ring-rose-500'
                     : 'border-slate-300 dark:border-slate-700'
                 } bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500`}
               >
+                <option value="">-- Select a supplier --</option>
                 {suppliers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} (Lead time: {s.leadTimeDays}d)

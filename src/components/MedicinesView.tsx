@@ -3,6 +3,7 @@ import { Pill, Plus, Search, Filter, Box, Send, Edit3, Trash2, AlertTriangle, Ey
 import { Batch, Medicine } from '../types';
 import { getExpiryStatus, getMedicineInventory } from '../utils/fefo';
 import { EmptyState } from './EmptyState';
+import { MedicineImage } from './MedicineImage';
 
 interface MedicinesViewProps {
   medicines: Medicine[];
@@ -180,17 +181,22 @@ export const MedicinesView: React.FC<MedicinesViewProps> = ({
                       >
                         {/* Medicine Name */}
                         <td className="py-3.5 px-4">
-                          <button
-                            onClick={() => onViewMedicine(m)}
-                            className="text-left font-bold text-slate-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400 block transition-colors cursor-pointer"
-                          >
-                            {m.name}
-                          </button>
-                          {m.genericName && (
-                            <span className="text-[11px] text-slate-400 block mt-0.5">
-                              {m.genericName}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-3">
+                            <MedicineImage src={m.imageUrl} alt={m.name} size="sm" />
+                            <div>
+                              <button
+                                onClick={() => onViewMedicine(m)}
+                                className="text-left font-bold text-slate-900 dark:text-white hover:text-teal-600 dark:hover:text-teal-400 block transition-colors cursor-pointer"
+                              >
+                                {m.name}
+                              </button>
+                              {m.genericName && (
+                                <span className="text-[11px] text-slate-400 block mt-0.5">
+                                  {m.genericName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
 
                         {/* Category */}

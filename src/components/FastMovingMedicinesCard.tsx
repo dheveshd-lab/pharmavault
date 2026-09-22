@@ -1,6 +1,7 @@
 import React from 'react';
 import { TrendingUp, AlertTriangle, ArrowRight, Activity, Zap } from 'lucide-react';
 import { Medicine, MedicineUsageMetrics } from '../types';
+import { MedicineImage } from './MedicineImage';
 
 interface FastMovingMedicinesCardProps {
   metrics: MedicineUsageMetrics[];
@@ -92,12 +93,21 @@ export const FastMovingMedicinesCard: React.FC<FastMovingMedicinesCardProps> = (
                     }}
                   >
                     <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-900 dark:text-white">
-                        {m.medicineName}
+                      <div className="flex items-center gap-2.5">
+                        <MedicineImage
+                          src={medicines.find((x) => x.id === m.medicineId)?.imageUrl}
+                          alt={m.medicineName}
+                          size="xs"
+                        />
+                        <div>
+                          <div className="font-semibold text-slate-900 dark:text-white">
+                            {m.medicineName}
+                          </div>
+                          {m.category && (
+                            <div className="text-[10px] text-slate-400">{m.category}</div>
+                          )}
+                        </div>
                       </div>
-                      {m.category && (
-                        <div className="text-[10px] text-slate-400">{m.category}</div>
-                      )}
                     </td>
 
                     <td className="py-3 px-3 font-bold text-slate-900 dark:text-white">

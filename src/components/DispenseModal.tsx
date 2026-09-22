@@ -3,6 +3,7 @@ import { X, Send, AlertCircle, CheckCircle2, ShieldAlert, AlertTriangle } from '
 import { Batch, DispensingRecord, Medicine } from '../types';
 import { calculateFEFOAllocation, getMedicineInventory } from '../utils/fefo';
 import { ErrorBoundary } from './ErrorBoundary';
+import { MedicineImage } from './MedicineImage';
 
 interface DispenseModalProps {
   isOpen: boolean;
@@ -156,19 +157,28 @@ export const DispenseModalContent: React.FC<DispenseModalProps> = ({
 
           {/* Current Stock Banner */}
           {currentMedicine && (
-            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500">Available Stock:</span>
-                <span className="font-bold text-slate-900 dark:text-white text-sm">
-                  {inventory.availableUnits} {currentMedicine.unit || 'units'}
-                </span>
-                {inventory.expiredUnits > 0 && (
-                  <span className="text-rose-500 font-medium">
-                    ({inventory.expiredUnits} expired units excluded)
-                  </span>
-                )}
+            <div className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3">
+                <MedicineImage
+                  src={currentMedicine.imageUrl}
+                  alt={currentMedicine.name}
+                  size="sm"
+                />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">Available Stock:</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">
+                      {inventory.availableUnits} {currentMedicine.unit || 'units'}
+                    </span>
+                  </div>
+                  {inventory.expiredUnits > 0 && (
+                    <span className="text-rose-500 font-medium block mt-0.5">
+                      ({inventory.expiredUnits} expired units excluded)
+                    </span>
+                  )}
+                </div>
               </div>
-              <span className="text-slate-400">
+              <span className="text-slate-400 shrink-0">
                 Min Stock Level: {currentMedicine.minStockLevel}
               </span>
             </div>

@@ -1,7 +1,21 @@
 export type MedicineStatus = 'Active' | 'Discontinued' | 'Inactive';
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  avatarUrl?: string;
+}
+
+export interface AuthSession {
+  user: User;
+  token: string;
+}
+
 export interface Medicine {
   id: string;
+  userId?: string;
   name: string; // Medicine Name *
   genericName?: string;
   category: string; // Category *
@@ -11,13 +25,16 @@ export interface Medicine {
   minStockLevel: number; // Minimum Stock Level *
   description?: string;
   status: MedicineStatus;
+  imageUrl?: string; // Medicine image URL or data URI
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Batch {
   id: string;
+  userId?: string;
   medicineId: string; // Medicine: Automatically selected
+  medicine_id?: string; // Database relationship alias
   medicineName: string;
   batchNumber: string; // Batch Number *
   quantity: number; // Quantity *
@@ -25,6 +42,7 @@ export interface Batch {
   manufacturingDate?: string;
   expiryDate: string; // Expiry Date *
   supplierId: string; // Supplier *
+  supplier_id?: string; // Database relationship alias
   supplierName: string;
   purchasePrice?: number;
   sellingPrice?: number;
@@ -33,6 +51,7 @@ export interface Batch {
 
 export interface Supplier {
   id: string;
+  userId?: string;
   name: string; // Supplier Name *
   contactPerson?: string;
   phone?: string;
@@ -51,6 +70,7 @@ export interface BatchAllocation {
 
 export interface DispensingRecord {
   id: string;
+  userId?: string;
   medicineId: string;
   medicineName: string;
   quantity: number;
