@@ -3,25 +3,48 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { createServer as createViteServer } from 'vite';
 
 const app = express();
 const PORT = 3000;
+
+// Enable CORS for cross-origin deployments (e.g. Vercel frontend -> backend)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
 
 // High body limit for image uploads (e.g. 15MB)
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // Directories for local file persistence & uploads
-const DATA_DIR = path.join(process.cwd(), 'data');
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const BASE_DATA_DIR = path.join(process.cwd(), 'data');
+const DATA_DIR = IS_SERVERLESS ? path.join('/tmp', 'pharmavault_data') : BASE_DATA_DIR;
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+  if (IS_SERVERLESS && !fs.existsSync(DB_FILE)) {
+    const defaultDbFile = path.join(BASE_DATA_DIR, 'db.json');
+    if (fs.existsSync(defaultDbFile)) {
+      fs.copyFileSync(defaultDbFile, DB_FILE);
+    }
+  }
+} catch (fsErr) {
+  console.warn('Filesystem init notice:', fsErr);
 }
 
 // Ensure db.json structure
@@ -294,6 +317,7 @@ app.post('/api/auth/login', async (req: Request, res: Response): Promise<void> =
     saveDatabase(db);
 
     res.json({
+      success: true,
       user: {
         id: user.id,
         name: user.name,
@@ -712,6 +736,7 @@ app.post('/api/dispense', requireAuth, (req: AuthenticatedRequest, res: Response
 // -------------------------------------------------------------
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -730,4 +755,9 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!IS_SERVERLESS) {
+  startServer();
+}
+
+export default app;
+

@@ -37,8 +37,16 @@ export function clearStoredSession(): void {
 }
 
 // -------------------------------------------------------------
-// Cloud API Helpers
+// API URL & Safe Request Helpers
 // -------------------------------------------------------------
+
+// Optional custom API URL; defaults to empty string '' for same-project Vercel deployments.
+// Resulting fetch calls use relative paths: `${API_URL}/api/auth/login` -> '/api/auth/login'
+export const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+
+export function getApiBaseUrl(): string {
+  return API_URL;
+}
 
 function getAuthHeader(): Record<string, string> {
   const session = getStoredSession();
@@ -53,21 +61,107 @@ function getAuthHeader(): Record<string, string> {
   };
 }
 
+/**
+ * Robust fetch wrapper that strictly checks response content-type, status,
+ * and URL before attempting JSON parsing. Never throws unexpected token JSON errors on HTML.
+ */
+export async function safeApiFetch<T = any>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const baseUrl = getApiBaseUrl();
+  const fullUrl = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
+
+  let res: Response;
+  try {
+    res = await fetch(fullUrl, options);
+  } catch (networkErr: any) {
+    throw new Error(
+      `Network error: Unable to connect to server at ${fullUrl}. Please check your connection or backend URL.`
+    );
+  }
+
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+  const isJson = contentType.includes('application/json');
+
+  if (!res.ok) {
+    let errorMessage = '';
+
+    if (isJson) {
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || errorData.message || '';
+      } catch {
+        // Fall through to text handling if JSON parsing fails
+      }
+    }
+
+    if (!errorMessage) {
+      try {
+        const text = await res.text();
+        const trimmed = text.trim();
+        // Check for HTML document or standard Vercel / server 404 / 502 pages
+        if (
+          trimmed.startsWith('<!DOCTYPE') ||
+          trimmed.startsWith('<html') ||
+          trimmed.startsWith('The page') ||
+          trimmed.includes('<body')
+        ) {
+          if (res.status === 404) {
+            errorMessage = `Service endpoint not found (404) at ${fullUrl}. If deployed on Vercel, ensure VITE_API_URL or serverless functions are configured.`;
+          } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+            errorMessage = `Server temporarily unavailable (${res.status}). Please try again shortly.`;
+          } else {
+            errorMessage = `Server returned an HTML error response (HTTP ${res.status}).`;
+          }
+        } else {
+          errorMessage = trimmed.slice(0, 250) || `Request failed with status ${res.status}.`;
+        }
+      } catch {
+        errorMessage = `Request failed with status ${res.status}.`;
+      }
+    }
+
+    throw new Error(errorMessage || `Request failed with status ${res.status}.`);
+  }
+
+  // Handle 204 No Content
+  if (res.status === 204) {
+    return {} as T;
+  }
+
+  // Handle expected JSON responses
+  if (isJson) {
+    try {
+      return (await res.json()) as T;
+    } catch {
+      throw new Error('Server returned an invalid JSON response.');
+    }
+  }
+
+  // Fallback for non-JSON OK responses
+  const rawText = await res.text();
+  try {
+    return JSON.parse(rawText) as T;
+  } catch {
+    return rawText as unknown as T;
+  }
+}
+
+// -------------------------------------------------------------
+// Authentication Endpoints
+// -------------------------------------------------------------
+
 export async function apiRegister(
   name: string,
   email: string,
   password: string
 ): Promise<AuthSession> {
-  const res = await fetch('/api/auth/register', {
+  const data = await safeApiFetch<{ user: User; token: string }>('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email, password }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to create account.');
-  }
 
   const session: AuthSession = {
     user: data.user,
@@ -78,16 +172,11 @@ export async function apiRegister(
 }
 
 export async function apiLogin(email: string, password: string): Promise<AuthSession> {
-  const res = await fetch('/api/auth/login', {
+  const data = await safeApiFetch<{ user: User; token: string }>('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Invalid email or password.');
-  }
 
   const session: AuthSession = {
     user: data.user,
@@ -99,12 +188,12 @@ export async function apiLogin(email: string, password: string): Promise<AuthSes
 
 export async function apiLogout(): Promise<void> {
   try {
-    await fetch('/api/auth/logout', {
+    await safeApiFetch('/api/auth/logout', {
       method: 'POST',
       headers: getAuthHeader(),
     });
   } catch (err) {
-    console.warn('Logout network error:', err);
+    console.warn('Logout network notice:', err);
   } finally {
     clearStoredSession();
   }
@@ -115,18 +204,12 @@ export async function apiGetCurrentUser(): Promise<User | null> {
   if (!session?.token) return null;
 
   try {
-    const res = await fetch('/api/auth/me', {
+    const data = await safeApiFetch<{ user: User }>('/api/auth/me', {
       headers: getAuthHeader(),
     });
-
-    if (!res.ok) {
-      clearStoredSession();
-      return null;
-    }
-
-    const data = await res.json();
-    return data.user;
+    return data?.user || null;
   } catch {
+    clearStoredSession();
     return null;
   }
 }
@@ -134,17 +217,11 @@ export async function apiGetCurrentUser(): Promise<User | null> {
 export async function apiForgotPassword(
   email: string
 ): Promise<{ success: boolean; message: string; devResetCode?: string }> {
-  const res = await fetch('/api/auth/forgot-password', {
+  return safeApiFetch('/api/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to process forgot password request.');
-  }
-  return data;
 }
 
 export async function apiResetPassword(
@@ -152,33 +229,22 @@ export async function apiResetPassword(
   resetCode: string,
   newPassword: string
 ): Promise<{ success: boolean; message: string }> {
-  const res = await fetch('/api/auth/reset-password', {
+  return safeApiFetch('/api/auth/reset-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, resetCode, newPassword }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to reset password.');
-  }
-  return data;
 }
 
 // -------------------------------------------------------------
 // Cloud Image Upload
 // -------------------------------------------------------------
 export async function apiUploadImage(imageBase64: string, filename?: string): Promise<string> {
-  const res = await fetch('/api/upload/image', {
+  const data = await safeApiFetch<{ url: string }>('/api/upload/image', {
     method: 'POST',
     headers: getAuthHeader(),
     body: JSON.stringify({ imageBase64, filename }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to upload medicine image.');
-  }
   return data.url;
 }
 
@@ -187,15 +253,10 @@ export async function apiUploadImage(imageBase64: string, filename?: string): Pr
 // -------------------------------------------------------------
 
 export async function apiFetchInventory(): Promise<AppData> {
-  const res = await fetch('/api/inventory', {
+  const data = await safeApiFetch<any>('/api/inventory', {
     headers: getAuthHeader(),
   });
 
-  if (!res.ok) {
-    throw new Error('Failed to load inventory from cloud.');
-  }
-
-  const data = await res.json();
   return {
     medicines: Array.isArray(data.medicines) ? data.medicines : [],
     batches: Array.isArray(data.batches) ? data.batches : [],
@@ -206,109 +267,69 @@ export async function apiFetchInventory(): Promise<AppData> {
 }
 
 export async function apiSyncInventory(data: AppData): Promise<void> {
-  const res = await fetch('/api/inventory/sync', {
+  await safeApiFetch('/api/inventory/sync', {
     method: 'POST',
     headers: getAuthHeader(),
     body: JSON.stringify(data),
   });
-
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error || 'Failed to synchronize inventory.');
-  }
 }
 
 export async function apiSaveMedicine(medicine: Medicine): Promise<Medicine> {
-  const res = await fetch('/api/medicines', {
+  const data = await safeApiFetch<{ medicine: Medicine }>('/api/medicines', {
     method: 'POST',
     headers: getAuthHeader(),
     body: JSON.stringify(medicine),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to save medicine.');
-  }
   return data.medicine;
 }
 
 export async function apiDeleteMedicine(id: string): Promise<void> {
-  const res = await fetch(`/api/medicines/${id}`, {
+  await safeApiFetch(`/api/medicines/${id}`, {
     method: 'DELETE',
     headers: getAuthHeader(),
   });
-
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Failed to delete medicine.');
-  }
 }
 
 export async function apiSaveBatch(batch: Batch): Promise<Batch> {
-  const res = await fetch('/api/batches', {
+  const data = await safeApiFetch<{ batch: Batch }>('/api/batches', {
     method: 'POST',
     headers: getAuthHeader(),
     body: JSON.stringify(batch),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to save batch.');
-  }
   return data.batch;
 }
 
 export async function apiDeleteBatch(id: string): Promise<void> {
-  const res = await fetch(`/api/batches/${id}`, {
+  await safeApiFetch(`/api/batches/${id}`, {
     method: 'DELETE',
     headers: getAuthHeader(),
   });
-
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Failed to delete batch.');
-  }
 }
 
 export async function apiSaveSupplier(supplier: Supplier): Promise<Supplier> {
-  const res = await fetch('/api/suppliers', {
+  const data = await safeApiFetch<{ supplier: Supplier }>('/api/suppliers', {
     method: 'POST',
     headers: getAuthHeader(),
     body: JSON.stringify(supplier),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to save supplier.');
-  }
   return data.supplier;
 }
 
 export async function apiDeleteSupplier(id: string): Promise<void> {
-  const res = await fetch(`/api/suppliers/${id}`, {
+  await safeApiFetch(`/api/suppliers/${id}`, {
     method: 'DELETE',
     headers: getAuthHeader(),
   });
-
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error || 'Failed to delete supplier.');
-  }
 }
 
 export async function apiRecordDispense(
   record: DispensingRecord,
   updatedBatches: Batch[]
 ): Promise<DispensingRecord> {
-  const res = await fetch('/api/dispense', {
+  const data = await safeApiFetch<{ record: DispensingRecord }>('/api/dispense', {
     method: 'POST',
     headers: getAuthHeader(),
     body: JSON.stringify({ record, updatedBatches }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to record dispensing transaction.');
-  }
   return data.record;
 }

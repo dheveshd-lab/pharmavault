@@ -13,23 +13,83 @@
       "email": "john.test@pharmavault.org",
       "passwordHash": "$2b$10$MesTNRuEbn0Pz/pfmIUuBub7oHbX.jHOyMQ3zLnytGCG6lvvhrQfS",
       "createdAt": "2026-09-22T12:52:59.336Z"
+    },
+    {
+      "id": "usr_1790082490270_7ca0c783",
+      "name": "Dr. Test Physician",
+      "email": "doctor_1790082490164@pharmavault.org",
+      "passwordHash": "$2b$10$2nuIfWfg8xORFeHv5QiAWOafnbx1wgBbY4Re73YIyauRdoLRFGwi2",
+      "createdAt": "2026-09-22T13:08:10.270Z"
+    },
+    {
+      "id": "usr_1790083108545_1e970efb",
+      "name": "Dr. Alice",
+      "email": "usera_1790083108445@pharmavault.org",
+      "passwordHash": "$2b$10$slSyBG/35uUlPx3TEhVjUuBC4xbcSyLe13z/5c7k7NxwkFvUqpba6",
+      "createdAt": "2026-09-22T13:18:28.545Z"
+    },
+    {
+      "id": "usr_1790083108791_146a5ae7",
+      "name": "Dr. Bob",
+      "email": "userb_1790083108711@pharmavault.org",
+      "passwordHash": "$2b$10$h9OYU8hgtgVUbnfVTdWRBuLWWgOOI26Anm/9GuTF0dn5TUA3uDEjy",
+      "createdAt": "2026-09-22T13:18:28.791Z"
     }
   ],
   "sessions": [
-    {
-      "token": "27af4b2a49240242b814e20e9b7eb40b7b13022023ddae8efd11f8d8d94a93e9",
-      "userId": "usr_1790081046062_87554bad",
-      "createdAt": 1790081046063,
-      "expiresAt": 1792673046063
-    },
     {
       "token": "4faad103463d775c05b8625d3215b965e9fe8f294933c01bfcdbdda0053d0705",
       "userId": "usr_1790081579335_5c0103af",
       "createdAt": 1790081579336,
       "expiresAt": 1792673579336
+    },
+    {
+      "token": "956b693b2bee705a8207949b3f786a60d4a75b4b2d11d0e8cb679a4afbd1fa2e",
+      "userId": "usr_1790081046062_87554bad",
+      "createdAt": 1790082437831,
+      "expiresAt": 1792674437831
+    },
+    {
+      "token": "c6afa653f16707f9c0a8e3c3a3facba0bd33b5695f039ac9224528c679278b60",
+      "userId": "usr_1790082490270_7ca0c783",
+      "createdAt": 1790082490270,
+      "expiresAt": 1792674490270
+    },
+    {
+      "token": "998ab6e5fd57a5c9242c1cac2a3034643a20488bf9e1f9ecd74ba23f67b143e1",
+      "userId": "usr_1790082490270_7ca0c783",
+      "createdAt": 1790082490373,
+      "expiresAt": 1792674490373
+    },
+    {
+      "token": "6068f0d0242f2e6bd123e2e5b014b9fdb02d123dd0d12f2c02df758d58249afe",
+      "userId": "usr_1790083108545_1e970efb",
+      "createdAt": 1790083108546,
+      "expiresAt": 1792675108546
+    },
+    {
+      "token": "b4896ef973b8ca8d522f4ec64742950c479777147598fd97a62a548e9b262f4a",
+      "userId": "usr_1790083108545_1e970efb",
+      "createdAt": 1790083108709,
+      "expiresAt": 1792675108709
+    },
+    {
+      "token": "5bf277693556f86c1e1df0cd6b653e49a5d2872458d94a548bd412b501c4d230",
+      "userId": "usr_1790083108791_146a5ae7",
+      "createdAt": 1790083108791,
+      "expiresAt": 1792675108791
     }
   ],
   "medicines": [
+    {
+      "name": "Amoxicillin 500mg",
+      "category": "Antibiotics",
+      "dosageForm": "Capsule",
+      "minStockLevel": 50,
+      "userId": "usr_1790083108545_1e970efb",
+      "updatedAt": "2026-09-22T13:18:28.711Z",
+      "createdAt": "2026-09-22T13:18:28.711Z"
+    },
     {
       "id": "med-penicillium-500",
       "name": "penicillium",
@@ -61,6 +121,22 @@
     }
   ],
   "batches": [
+    {
+      "id": "batch-1790081915904-fj2j",
+      "medicineId": "med-1790081191211-ebfmu",
+      "medicine_id": "med-1790081191211-ebfmu",
+      "medicineName": "pennicilium",
+      "batchNumber": "2096",
+      "quantity": 450,
+      "initialQuantity": 500,
+      "manufacturingDate": "2026-09-12",
+      "expiryDate": "2028-09-12",
+      "supplierId": "sup-1790081259027-e7jr",
+      "supplier_id": "sup-1790081259027-e7jr",
+      "supplierName": "APPOLO",
+      "createdAt": "2026-09-22T12:58:35.904Z",
+      "userId": "usr_1790081046062_87554bad"
+    },
     {
       "id": "batch-2096",
       "medicineId": "med-penicillium-500",
@@ -97,5 +173,25 @@
       "userId": "usr_1790081046062_87554bad"
     }
   ],
-  "dispensingRecords": []
+  "dispensingRecords": [
+    {
+      "id": "disp-1790081975728-09wh",
+      "medicineId": "med-1790081191211-ebfmu",
+      "medicineName": "pennicilium",
+      "quantity": 50,
+      "batchAllocations": [
+        {
+          "batchId": "batch-1790081915904-fj2j",
+          "batchNumber": "2096",
+          "expiryDate": "2028-09-12",
+          "quantity": 50
+        }
+      ],
+      "patientName": "DHEVESH",
+      "prescribedBy": "dr pavan",
+      "notes": "one per day",
+      "dispensedAt": "2026-09-22T07:28:00.000Z",
+      "userId": "usr_1790081046062_87554bad"
+    }
+  ]
 }
