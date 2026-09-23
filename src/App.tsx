@@ -13,40 +13,17 @@ import {
   Settings,
   Send,
   Plus,
-  AlertTriangle,
-  Sparkles,
-  RotateCcw,
-  ShieldCheck,
-  CheckCircle2,
   Menu,
   X,
   Activity,
-  Loader2,
-  Cloud,
 } from 'lucide-react';
-import { AppData, AuthSession, Batch, DispensingRecord, Medicine, Supplier, User } from './types';
+import { AppData, Batch, DispensingRecord, Medicine, Supplier } from './types';
 import {
   getInitialOrStoredData,
   persistAppData,
   generateDemoDataset,
   INITIAL_EMPTY_DATA,
 } from './utils/storage';
-import {
-  getStoredSession,
-  saveStoredSession,
-  clearStoredSession,
-  apiGetCurrentUser,
-  apiLogout,
-  apiFetchInventory,
-  apiSyncInventory,
-  apiSaveMedicine,
-  apiDeleteMedicine,
-  apiSaveBatch,
-  apiDeleteBatch,
-  apiSaveSupplier,
-  apiDeleteSupplier,
-  apiRecordDispense,
-} from './utils/api';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AddMedicineModal } from './components/AddMedicineModal';
 import { AddBatchModal } from './components/AddBatchModal';
@@ -61,24 +38,22 @@ import { DispensingHistoryView } from './components/DispensingHistoryView';
 import { DispenseView } from './components/DispenseView';
 import { UsageIntelligenceView } from './components/UsageIntelligenceView';
 import { SettingsView } from './components/SettingsView';
-import { AuthScreen } from './components/AuthScreen';
-import { UserMenu } from './components/UserMenu';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { calculateFEFOAllocation } from './utils/fefo';
 
 export default function App() {
-  // Auth state
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
+  // Inventory database state: loaded directly from storage, initially empty
+  const [data, setData] = useState<AppData>(() => getInitialOrStoredData());
 
-  // Inventory database state: per-user cloud isolated
-  const [data, setData] = useState<AppData>(() => INITIAL_EMPTY_DATA);
+  // Automatically persist any data updates to storage
+  useEffect(() => {
+    persistAppData(data);
+  }, [data]);
 
-  // Navigation tab
+  // Navigation tab - starts directly at Dashboard
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'medicines' | 'batches' | 'dispense' | 'suppliers' | 'history' | 'usage' | 'settings'
-  >('medicines');
+  >('dashboard');
 
   // Mobile menu open state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -100,69 +75,6 @@ export default function App() {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
-
-  // Check auth session on boot
-  useEffect(() => {
-    async function initAuth() {
-      setAuthLoading(true);
-      const session = getStoredSession();
-      if (!session) {
-        setAuthLoading(false);
-        return;
-      }
-
-      try {
-        const user = await apiGetCurrentUser();
-        if (user) {
-          setCurrentUser(user);
-          // Load user inventory from cloud database
-          try {
-            const userInventory = await apiFetchInventory();
-            setData(userInventory);
-          } catch {
-            // Fallback to local user cache if offline
-            setData(getInitialOrStoredData());
-          }
-        } else {
-          setCurrentUser(null);
-        }
-      } catch (err) {
-        console.warn('Auth check failed:', err);
-        clearStoredSession();
-        setCurrentUser(null);
-      } finally {
-        setAuthLoading(false);
-      }
-    }
-
-    initAuth();
-  }, []);
-
-  // When auth session succeeds
-  const handleAuthSuccess = async (session: AuthSession) => {
-    setCurrentUser(session.user);
-    setAuthLoading(true);
-    try {
-      const userInventory = await apiFetchInventory();
-      setData(userInventory);
-      addToast('Welcome back', `Signed in as ${session.user.name}. Cloud inventory loaded.`);
-    } catch {
-      setData(INITIAL_EMPTY_DATA);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await apiLogout();
-    } catch {
-      clearStoredSession();
-    }
-    setCurrentUser(null);
-    setData(INITIAL_EMPTY_DATA);
-    addToast('Signed Out', 'You have been securely signed out of PharmaVault.');
-  };
 
   // Modals state
   const [isAddMedicineOpen, setIsAddMedicineOpen] = useState(false);
@@ -186,8 +98,8 @@ export default function App() {
     }
   }, [data.medicines]);
 
-  // Handlers with Cloud Sync
-  const handleSaveMedicine = async (medicine: Medicine) => {
+  // Handlers
+  const handleSaveMedicine = (medicine: Medicine) => {
     setData((prev) => {
       const exists = prev.medicines.some((m) => m.id === medicine.id);
       let updatedMedicines: Medicine[];
@@ -199,21 +111,15 @@ export default function App() {
       return { ...prev, medicines: updatedMedicines, isDemoData: false };
     });
 
-    try {
-      await apiSaveMedicine(medicine);
-    } catch (err: any) {
-      console.error('Failed to sync medicine to cloud:', err);
-    }
-
     addToast(
       medicine.id && data.medicines.some((m) => m.id === medicine.id)
         ? 'Medicine Updated'
         : 'Medicine Added',
-      `${medicine.name} (${medicine.dosageForm}) saved to your cloud catalog.`
+      `${medicine.name} (${medicine.dosageForm}) saved to your catalog.`
     );
   };
 
-  const handleDeleteMedicine = async (medicineId: string) => {
+  const handleDeleteMedicine = (medicineId: string) => {
     const med = data.medicines.find((m) => m.id === medicineId);
     setData((prev) => ({
       ...prev,
@@ -225,12 +131,6 @@ export default function App() {
       setViewingMedicine(null);
     }
 
-    try {
-      await apiDeleteMedicine(medicineId);
-    } catch (err) {
-      console.error('Failed to delete medicine from cloud:', err);
-    }
-
     addToast(
       'Medicine Deleted',
       `${med?.name || 'Medicine'} and its batches have been removed from your inventory.`,
@@ -238,7 +138,7 @@ export default function App() {
     );
   };
 
-  const handleSaveBatch = async (batch: Batch) => {
+  const handleSaveBatch = (batch: Batch) => {
     setData((prev) => {
       const exists = prev.batches.some((b) => b.id === batch.id);
       let updatedBatches: Batch[];
@@ -250,30 +150,18 @@ export default function App() {
       return { ...prev, batches: updatedBatches, isDemoData: false };
     });
 
-    try {
-      await apiSaveBatch(batch);
-    } catch (err) {
-      console.error('Failed to sync batch to cloud:', err);
-    }
-
     addToast(
       'Batch Registered',
       `Batch ${batch.batchNumber} (${batch.quantity} units) registered for ${batch.medicineName}.`
     );
   };
 
-  const handleDeleteBatch = async (batchId: string) => {
+  const handleDeleteBatch = (batchId: string) => {
     const batch = data.batches.find((b) => b.id === batchId);
     setData((prev) => ({
       ...prev,
       batches: prev.batches.filter((b) => b.id !== batchId),
     }));
-
-    try {
-      await apiDeleteBatch(batchId);
-    } catch (err) {
-      console.error('Failed to delete batch from cloud:', err);
-    }
 
     addToast(
       'Batch Removed',
@@ -282,7 +170,7 @@ export default function App() {
     );
   };
 
-  const handleSaveSupplier = async (supplier: Supplier) => {
+  const handleSaveSupplier = (supplier: Supplier) => {
     setData((prev) => {
       const exists = prev.suppliers.some((s) => s.id === supplier.id);
       let updated: Supplier[];
@@ -294,34 +182,20 @@ export default function App() {
       return { ...prev, suppliers: updated, isDemoData: false };
     });
 
-    try {
-      await apiSaveSupplier(supplier);
-    } catch (err) {
-      console.error('Failed to sync supplier to cloud:', err);
-    }
-
     addToast('Supplier Saved', `${supplier.name} added to suppliers directory.`);
   };
 
-  const handleDeleteSupplier = async (supplierId: string) => {
+  const handleDeleteSupplier = (supplierId: string) => {
     const s = data.suppliers.find((item) => item.id === supplierId);
     setData((prev) => ({
       ...prev,
       suppliers: prev.suppliers.filter((item) => item.id !== supplierId),
     }));
 
-    try {
-      await apiDeleteSupplier(supplierId);
-    } catch (err) {
-      console.error('Failed to delete supplier from cloud:', err);
-    }
-
     addToast('Supplier Removed', `${s?.name || 'Supplier'} deleted.`, 'info');
   };
 
-  const handleRecordDispensing = async (record: DispensingRecord) => {
-    let updatedBatchesCopy: Batch[] = [];
-
+  const handleRecordDispensing = async (record: DispensingRecord): Promise<boolean> => {
     setData((prev) => {
       const allocMap = new Map<string, number>();
       for (const a of record.batchAllocations) {
@@ -339,8 +213,6 @@ export default function App() {
         return b;
       });
 
-      updatedBatchesCopy = updatedBatches;
-
       return {
         ...prev,
         batches: updatedBatches,
@@ -348,16 +220,11 @@ export default function App() {
       };
     });
 
-    try {
-      await apiRecordDispense(record, updatedBatchesCopy);
-    } catch (err) {
-      console.error('Failed to sync dispense transaction to cloud:', err);
-    }
-
     addToast(
       'Dispensing recorded successfully.',
       `Dispensed ${record.quantity} units of ${record.medicineName} using FEFO batch sequence.`
     );
+    return true;
   };
 
   const handleDispenseFromView = async (params: {
@@ -367,32 +234,31 @@ export default function App() {
     prescriptionNumber?: string;
     prescribedBy?: string;
     notes?: string;
-    unitPrice?: number;
     dispensedAt?: string;
+    unitPrice?: number;
   }): Promise<boolean> => {
+    const med = data.medicines.find((m) => m.id === params.medicineId);
+    if (!med) {
+      addToast('Dispense Error', 'Selected medicine does not exist.', 'error');
+      return false;
+    }
+
+    const fefoResult = calculateFEFOAllocation(params.quantity, med.id, data.batches);
+    if (!fefoResult.isSufficient) {
+      addToast(
+        'Insufficient Stock',
+        `Cannot dispense ${params.quantity} units. Only ${fefoResult.totalAllocated} non-expired units available.`,
+        'error'
+      );
+      return false;
+    }
+
     try {
-      const med = data.medicines.find((m) => m.id === params.medicineId);
-      if (!med) {
-        addToast('Dispensing Error', 'Selected medicine not found in inventory.', 'error');
-        return false;
-      }
-
-      const fefoResult = calculateFEFOAllocation(params.quantity, params.medicineId, data.batches, false);
-      if (!fefoResult.isSufficient || fefoResult.allocations.length === 0) {
-        addToast(
-          'Insufficient Stock',
-          `Cannot dispense ${params.quantity} units. Only ${fefoResult.totalAvailable} valid unexpired units available.`,
-          'error'
-        );
-        return false;
-      }
-
       let totalAmount = 0;
       for (const alloc of fefoResult.allocations) {
-        const b = data.batches.find((item) => item.id === alloc.batchId);
-        if (b && b.sellingPrice) {
-          totalAmount += b.sellingPrice * alloc.quantity;
-        }
+        const batch = data.batches.find((b) => b.id === alloc.batchId);
+        const price = params.unitPrice || batch?.sellingPrice || batch?.purchasePrice || 0;
+        totalAmount += alloc.quantity * price;
       }
 
       const record: DispensingRecord = {
@@ -406,7 +272,11 @@ export default function App() {
         prescribedBy: params.prescribedBy,
         notes: params.notes,
         dispensedAt: params.dispensedAt || new Date().toISOString(),
-        unitPrice: params.unitPrice || (params.quantity > 0 && totalAmount > 0 ? Number((totalAmount / params.quantity).toFixed(2)) : undefined),
+        unitPrice:
+          params.unitPrice ||
+          (params.quantity > 0 && totalAmount > 0
+            ? Number((totalAmount / params.quantity).toFixed(2))
+            : undefined),
         totalAmount: totalAmount > 0 ? totalAmount : undefined,
       };
 
@@ -419,14 +289,9 @@ export default function App() {
   };
 
   // Demo Data controls
-  const handleLoadDemoData = async () => {
+  const handleLoadDemoData = () => {
     const demo = generateDemoDataset();
     setData(demo);
-    try {
-      await apiSyncInventory(demo);
-    } catch (err) {
-      console.error('Failed to sync demo data:', err);
-    }
     addToast(
       'Demo Dataset Loaded',
       'Sample pharmaceutical data populated with active & critical FEFO batches.',
@@ -434,33 +299,18 @@ export default function App() {
     );
   };
 
-  const handleClearDemoData = async () => {
+  const handleClearDemoData = () => {
     setData(INITIAL_EMPTY_DATA);
-    try {
-      await apiSyncInventory(INITIAL_EMPTY_DATA);
-    } catch (err) {
-      console.error('Failed to clear demo data from cloud:', err);
-    }
     addToast('Demo Data Cleared', 'The database has been restored to clean state.', 'info');
   };
 
-  const handleClearAllData = async () => {
+  const handleClearAllData = () => {
     setData(INITIAL_EMPTY_DATA);
-    try {
-      await apiSyncInventory(INITIAL_EMPTY_DATA);
-    } catch (err) {
-      console.error('Failed to reset inventory in cloud:', err);
-    }
     addToast('Inventory Reset', 'All inventory and transaction records have been erased.', 'info');
   };
 
-  const handleImportData = async (imported: AppData) => {
+  const handleImportData = (imported: AppData) => {
     setData(imported);
-    try {
-      await apiSyncInventory(imported);
-    } catch (err) {
-      console.error('Failed to sync imported data to cloud:', err);
-    }
     addToast(
       'Data Imported',
       `Restored ${imported.medicines.length} medicines and ${imported.batches.length} batches.`
@@ -482,26 +332,6 @@ export default function App() {
     setEditingMedicine(medicine);
     setIsAddMedicineOpen(true);
   };
-
-  // Loading Screen
-  if (authLoading) {
-    return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-white font-sans">
-        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-teal-500/20 text-teal-400 border border-teal-500/30 mb-4 animate-pulse">
-          <Pill className="w-7 h-7" />
-        </div>
-        <div className="flex items-center gap-2 text-sm text-slate-300 font-medium">
-          <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
-          <span>Verifying PharmaVault Cloud Credentials...</span>
-        </div>
-      </div>
-    );
-  }
-
-  // If not authenticated, render Login / Register / Forgot Password screen
-  if (!currentUser) {
-    return <AuthScreen onSuccess={handleAuthSuccess} />;
-  }
 
   const hasMedicinesWithStock = data.medicines.some((m) =>
     data.batches.some((b) => b.medicineId === m.id && b.quantity > 0)
@@ -656,7 +486,7 @@ export default function App() {
               </button>
             </nav>
 
-            {/* User Profile & Quick Actions */}
+            {/* Quick Actions */}
             <div className="flex items-center gap-2 sm:gap-3">
               <button
                 id="header-quick-add-medicine-btn"
@@ -664,18 +494,11 @@ export default function App() {
                   setEditingMedicine(null);
                   setIsAddMedicineOpen(true);
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 + Add Medicine
               </button>
-
-              {/* User Avatar Menu with Logout */}
-              <UserMenu
-                user={currentUser}
-                onLogout={handleLogout}
-                onOpenSettings={() => setActiveTab('settings')}
-              />
 
               {/* Mobile menu toggle */}
               <button
@@ -859,7 +682,6 @@ export default function App() {
         {activeTab === 'settings' && (
           <SettingsView
             data={data}
-            currentUser={currentUser}
             onLoadDemoData={handleLoadDemoData}
             onClearDemoData={handleClearDemoData}
             onClearAllData={handleClearAllData}

@@ -1,7 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Pill, AlertTriangle, Upload, Trash2, RefreshCw, Loader2, Image as ImageIcon } from 'lucide-react';
 import { Medicine, MedicineStatus } from '../types';
-import { apiUploadImage } from '../utils/api';
 
 interface AddMedicineModalProps {
   isOpen: boolean;
@@ -88,24 +87,12 @@ export const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
       return;
     }
 
-    // Generate local preview immediately
+    // Generate local data URI immediately
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       const base64Data = event.target?.result as string;
       setImagePreview(base64Data);
-
-      // Upload to server persistent storage
-      setUploadingImage(true);
-      try {
-        const uploadedUrl = await apiUploadImage(base64Data, file.name);
-        setImageUrl(uploadedUrl);
-      } catch (err: any) {
-        setImageError(err.message || 'Failed to upload image. Preview will be saved as data URI.');
-        // Fallback: use the base64 preview directly
-        setImageUrl(base64Data);
-      } finally {
-        setUploadingImage(false);
-      }
+      setImageUrl(base64Data);
     };
     reader.readAsDataURL(file);
   };

@@ -1,6 +1,5 @@
 import React from 'react';
 import { Pill } from 'lucide-react';
-import { getApiBaseUrl } from '../utils/api';
 
 interface MedicineImageProps {
   src?: string | null;
@@ -45,15 +44,12 @@ export const MedicineImage: React.FC<MedicineImageProps> = ({
     );
   }
 
-  const baseUrl = getApiBaseUrl();
-  const resolvedSrc = src && src.startsWith('/uploads/') && baseUrl ? `${baseUrl}${src}` : src;
-
   return (
     <div
       className={`relative shrink-0 overflow-hidden bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 shadow-2xs ${sizeClasses[size]} ${className}`}
     >
       <img
-        src={resolvedSrc}
+        src={src}
         alt={alt}
         onError={() => setHasError(true)}
         className="w-full h-full object-cover object-center"

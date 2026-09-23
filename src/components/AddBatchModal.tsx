@@ -102,7 +102,6 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
     const newBatch: Batch = {
       id: `batch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       medicineId,
-      medicine_id: medicineId,
       medicineName: chosenMed?.name || 'Unknown Medicine',
       batchNumber: batchNumber.trim(),
       quantity: qty,
@@ -110,7 +109,6 @@ export const AddBatchModal: React.FC<AddBatchModalProps> = ({
       manufacturingDate: manufacturingDate || undefined,
       expiryDate,
       supplierId,
-      supplier_id: supplierId,
       supplierName: chosenSup?.name || 'Unknown Supplier',
       purchasePrice: purchasePrice ? parseFloat(purchasePrice) : undefined,
       sellingPrice: sellingPrice ? parseFloat(sellingPrice) : undefined,
