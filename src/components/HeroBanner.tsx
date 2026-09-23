@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Pill, Send, Plus, ChevronLeft, ChevronRight, ShieldCheck, Sparkles, Box } from 'lucide-react';
 import image1 from '../assets/images/pharmacy_hero_1_1790165865687.jpg';
 import image2 from '../assets/images/pharmacy_hero_2_1790165878396.jpg';
-import image3 from '../assets/images/pharmacy_hero_3_1790165891917.jpg';
+import image3 from '../assets/images/futuristic_pharma_lab_1790166245565.jpg';
+import { FuturisticPharmaScene } from './FuturisticPharmaScene';
 
 export const backgroundImages = [
   image1,
@@ -50,7 +51,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   const imageCaptions = [
     { title: 'Clinical Dispensary Vault', subtitle: 'Workstation & compounding lab' },
     { title: 'Sterile Inventory Bay', subtitle: 'Temperature-monitored medical storage' },
-    { title: 'Pharmaceutical Reserve & FEFO', subtitle: 'Modern healthcare supply chain & batch tracking' },
+    { title: 'Futuristic Molecular Lab & FEFO', subtitle: '3D interactive pharmaceutical depth environment' },
   ];
 
   return (
@@ -70,19 +71,26 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               idx === currentIndex ? 'opacity-100 scale-100' : 'opacity-0 pointer-events-none scale-105'
             } transform transition-transform duration-7000 ease-out`}
           >
-            <img
-              src={imgSrc}
-              alt=""
-              loading={idx === 0 ? 'eager' : 'lazy'}
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover object-center"
-            />
+            {idx === 2 ? (
+              <FuturisticPharmaScene
+                isActive={currentIndex === 2}
+                backgroundImage={imgSrc}
+              />
+            ) : (
+              <img
+                src={imgSrc}
+                alt=""
+                loading={idx === 0 ? 'eager' : 'lazy'}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover object-center"
+              />
+            )}
           </div>
         ))}
 
         {/* Deep Medical Navy & Blue Gradient Overlay to guarantee high text contrast */}
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/85 to-slate-950/75 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-900/40" />
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/85 to-slate-950/75 mix-blend-multiply pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-900/40 pointer-events-none" />
         <div className="absolute inset-0 bg-teal-950/20 mix-blend-color-dodge pointer-events-none" />
       </div>
 
