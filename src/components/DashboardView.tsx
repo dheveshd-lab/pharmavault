@@ -5,6 +5,9 @@ import { computeReorderRecommendations, getDaysUntil, getExpiryStatus, getMedici
 import { EmptyState } from './EmptyState';
 import { FastMovingMedicinesCard } from './FastMovingMedicinesCard';
 import { calculateUsageIntelligence } from '../utils/usageIntelligence';
+import { HeroBanner, backgroundImages } from './HeroBanner';
+
+export { backgroundImages };
 
 interface DashboardViewProps {
   data: AppData;
@@ -65,11 +68,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* High-Resolution Professional Healthcare & Pharmacy Hero Banner with 3 Rotating Visuals */}
+      <HeroBanner
+        onOpenAddMedicine={onOpenAddMedicine}
+        onOpenAddBatch={() => onOpenAddBatch()}
+        onOpenDispense={() => onOpenDispense()}
+        hasMedicines={medicines.length > 0}
+        totalMedicines={totalMedicines}
+        totalAvailableUnits={totalAvailableUnits}
+      />
+
       {/* Top Banner / Actions Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            Pharmacy Dashboard
+            Pharmacy Operations & Quick Actions
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             Real-time inventory levels, First-Expired First-Out (FEFO) queues, and dispensing controls.
