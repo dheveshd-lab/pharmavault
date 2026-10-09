@@ -1,6 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { X, Pill, AlertTriangle, Upload, Trash2, RefreshCw, Loader2, Image as ImageIcon } from 'lucide-react';
 import { Medicine, MedicineStatus } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { uploadMedicineImage } from '../utils/supabaseDb';
 
 interface AddMedicineModalProps {
   isOpen: boolean;
@@ -62,6 +64,7 @@ export const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
   const [imagePreview, setImagePreview] = useState<string | null>(initialData?.imageUrl || null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const { user, isSupabaseConnected } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -87,12 +90,26 @@ export const AddMedicineModal: React.FC<AddMedicineModalProps> = ({
       return;
     }
 
-    // Generate local data URI immediately
+    // Generate local data URI for instant responsive preview
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64Data = event.target?.result as string;
       setImagePreview(base64Data);
       setImageUrl(base64Data);
+
+      // If connected to Supabase, attempt persistent upload to Supabase Storage
+      if (user && isSupabaseConnected) {
+        setUploadingImage(true);
+        const { url, error } = await uploadMedicineImage(user.id, file);
+        setUploadingImage(false);
+        if (url) {
+          setImageUrl(url);
+        } else if (error) {
+          // If storage bucket is not configured, inform pharmacist
+          console.warn('Supabase storage upload notice:', error);
+          setImageError(`Stored as data URI (Supabase bucket notice: ${error})`);
+        }
+      }
     };
     reader.readAsDataURL(file);
   };

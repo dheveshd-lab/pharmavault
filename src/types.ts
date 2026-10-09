@@ -132,10 +132,74 @@ export interface UsagePeriodConfig {
   previousEndDate: string;
 }
 
+export interface UserProfile {
+  id: string;
+  fullName?: string;
+  pharmacyName?: string;
+  licenseNumber?: string;
+  phone?: string;
+  currency: string;
+  taxRatePercent: number;
+  createdAt: string;
+}
+
+export type PaymentMethod = 'Cash' | 'UPI' | 'Card' | 'Net Banking' | 'Other';
+export type PaymentStatus = 'Paid' | 'Partially Paid' | 'Unpaid' | 'Refunded';
+export type BillStatus = 'Completed' | 'Cancelled' | 'Refunded';
+
+export interface SalesBillItem {
+  id: string;
+  billId: string;
+  medicineId: string;
+  batchId: string;
+  medicineNameSnapshot: string;
+  batchNumberSnapshot: string;
+  expiryDateSnapshot: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  taxAmount: number;
+  lineTotal: number;
+}
+
+export interface PaymentRecord {
+  id: string;
+  billId: string;
+  amount: number;
+  paymentMethod: PaymentMethod;
+  paymentDate: string;
+  reference?: string;
+  status: string;
+  notes?: string;
+}
+
+export interface SalesBill {
+  id: string;
+  billNumber: string;
+  customerName?: string;
+  customerPhone?: string;
+  billDate: string;
+  items: SalesBillItem[];
+  subtotal: number;
+  discountAmount: number;
+  taxAmount: number;
+  taxRatePercent: number;
+  grandTotal: number;
+  amountPaid: number;
+  paymentStatus: PaymentStatus;
+  paymentMethod: PaymentMethod;
+  payments?: PaymentRecord[];
+  notes?: string;
+  status: BillStatus;
+  createdAt: string;
+}
+
 export interface AppData {
   medicines: Medicine[];
   batches: Batch[];
   suppliers: Supplier[];
   dispensingRecords: DispensingRecord[];
+  salesBills: SalesBill[];
+  profile?: UserProfile;
   isDemoData: boolean;
 }

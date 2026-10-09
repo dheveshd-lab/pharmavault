@@ -7,6 +7,7 @@ export const INITIAL_EMPTY_DATA: AppData = {
   batches: [],
   suppliers: [],
   dispensingRecords: [],
+  salesBills: [],
   isDemoData: false,
 };
 
@@ -23,6 +24,8 @@ export function getInitialOrStoredData(): AppData {
       batches: Array.isArray(parsed.batches) ? parsed.batches : [],
       suppliers: Array.isArray(parsed.suppliers) ? parsed.suppliers : [],
       dispensingRecords: Array.isArray(parsed.dispensingRecords) ? parsed.dispensingRecords : [],
+      salesBills: Array.isArray(parsed.salesBills) ? parsed.salesBills : [],
+      profile: parsed.profile,
       isDemoData: Boolean(parsed.isDemoData),
     };
   } catch (err) {
@@ -321,6 +324,7 @@ export function generateDemoDataset(): AppData {
     batches,
     suppliers,
     dispensingRecords,
+    salesBills: [],
     isDemoData: true,
   };
 }
